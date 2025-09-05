@@ -157,6 +157,9 @@ def index():
         except Exception as e:
             error = str(e)
 
+    # Get card_code for template context
+    card_code = request.form.get("card_code", "") if request.method == "POST" else ""
+    
     return render_template_string("""
         <!DOCTYPE html>
         <html>
@@ -249,7 +252,13 @@ def index():
                             </tr>
                             {% for seller, price in results.items() %}
                             <tr>
-                                <td><b>{{ seller }}</b></td>
+                                <td>
+                                    {% if seller != "TCGPlayer" %}
+                                        <b><a href="{{ base_url }}{{ card_code }}/?seller={{ codes[seller] }}" target="_blank" style="color: #007bff; text-decoration: none;">{{ seller }}</a></b>
+                                    {% else %}
+                                        <b><a href="{{ base_url }}{{ card_code }}" target="_blank" style="color: #007bff; text-decoration: none;">{{ seller }}</a></b>
+                                    {% endif %}
+                                </td>
                                 <td>{{ price }}</td>
                             </tr>
                             {% endfor %}
@@ -259,7 +268,8 @@ def index():
             {% endif %}
         </body>
         </html>
-    """, results=results, card_name=card_name, error=error, card_image=card_image)
+    """, results=results, card_name=card_name, error=error, card_image=card_image, 
+         codes=codes, base_url=Base_URL, card_code=card_code)
 
 if __name__ == "__main__":
     app.run(debug=True)
