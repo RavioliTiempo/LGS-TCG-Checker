@@ -88,9 +88,10 @@ def index():
                 results["TCGPlayer"] = tcg_price
                 
                 # Card image
-                card_image = f"https://tcgplayer-cdn.tcgplayer.com/product/{card_code}_in_600x600.jpg"
+                card_image = f"https://tcgplayer-cdn.tcgplayer.com/product/{card_code}_in_400x400.jpg"
 
                 # Check each seller
+                
                 for code_name, code_value in codes.items():
                     try:
                         # Create new page for each seller
@@ -162,18 +163,63 @@ def index():
         <head>
             <title>TCGPlayer Card Lookup</title>
             <style>
-                body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
-                h1 { color: #333; }
-                form { margin: 20px 0; }
+                body { font-family: Arial, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; }
+                h1 { color: #333; text-align: center; }
+                form { margin: 20px 0; text-align: center; }
                 input[type="text"] { padding: 10px; width: 300px; font-size: 16px; }
-                button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
+                button { padding: 3px 9px; background: #007bff; color: white; border: none; cursor: pointer; }
                 button:hover { background: #0056b3; }
-                table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                table { border-collapse: collapse; margin: 0; }
                 th, td { padding: 12px; text-align: left; border: 1px solid #ddd; }
                 th { background: #f8f9fa; font-weight: bold; }
-                .error { color: red; }
-                .card-info { display: flex; align-items: flex-start; gap: 20px; margin: 20px 0; }
-                .card-image { max-width: 300px; border: 1px solid #ddd; border-radius: 5px; }
+                .error { color: red; text-align: center; }
+                
+                .card-container { 
+                    display: flex; 
+                    gap: 30px; 
+                    margin: 20px 0; 
+                    align-items: flex-start; 
+                    justify-content: center;
+                    flex-wrap: wrap;
+                }
+                
+                .card-image-container {
+                    flex: 0 0 auto;
+                }
+                
+                .card-image { 
+                    max-width: 300px; 
+                    border: 1px solid #ddd; 
+                    border-radius: 5px;
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                }
+                
+                .card-details {
+                    flex: 1;
+                    min-width: 500px;
+                }
+                
+                .card-title {
+                    margin-top: 0;
+                    color: #333;
+                    font-size: 24px;
+                }
+                
+                .price-table {
+                    width: 100%;
+                    margin-top: 15px;
+                }
+                
+                @media (max-width: 900px) {
+                    .card-container {
+                        flex-direction: column;
+                        align-items: center;
+                    }
+                    .card-details {
+                        min-width: auto;
+                        width: 100%;
+                    }
+                }
             </style>
         </head>
         <body>
@@ -188,25 +234,28 @@ def index():
             {% endif %}
             
             {% if card_name %}
-                <div class="card-info">
-                    <img src="{{ card_image }}" alt="{{ card_name }}" class="card-image">
-                    <div>
-                        <h2>{{ card_name }}</h2>
+                <div class="card-container">
+                    <div class="card-image-container">
+                        <img src="{{ card_image }}" alt="{{ card_name }}" class="card-image">
+                    </div>
+                    
+                    <div class="card-details">
+                        <h2 class="card-title">{{ card_name }}</h2>
+                        
+                        <table class="price-table">
+                            <tr>
+                                <th>Seller</th>
+                                <th>Price / Availability</th>
+                            </tr>
+                            {% for seller, price in results.items() %}
+                            <tr>
+                                <td><b>{{ seller }}</b></td>
+                                <td>{{ price }}</td>
+                            </tr>
+                            {% endfor %}
+                        </table>
                     </div>
                 </div>
-
-                <table>
-                    <tr>
-                        <th>Seller</th>
-                        <th>Price / Availability</th>
-                    </tr>
-                    {% for seller, price in results.items() %}
-                    <tr>
-                        <td><b>{{ seller }}</b></td>
-                        <td>{{ price }}</td>
-                    </tr>
-                    {% endfor %}
-                </table>
             {% endif %}
         </body>
         </html>
