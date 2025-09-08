@@ -1,9 +1,11 @@
-from flask import Flask, render_template_string, request
+from flask import Flask, render_template_string, request, session
 from playwright.sync_api import sync_playwright
 import time
+from datetime import datetime
 from urllib.parse import quote_plus
 
 app = Flask(__name__)
+app.secret_key = 'your-secret-key-here'  # Change this to a secure secret key
 
 codes = {
     "Portals (Salisbury)": "a89437e2",
@@ -15,6 +17,11 @@ codes = {
 }
 
 Base_URL = "https://www.tcgplayer.com/product/"
+
+# Template filter for datetime formatting
+@app.template_filter('datetime')
+def format_datetime(timestamp):
+    return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
 
 def extract_price_from_text(text):
     """Extract price information from various text formats"""
@@ -37,7 +44,27 @@ def index():
     card_name = ""
     card_image = ""
     error = ""
+    
+    # Initialize search history in session if it doesn't exist
+    if 'search_history' not in session:
+        session['search_history'] = []
+    
+    # Add current search to history if it's a POST request with a valid card code
     if request.method == "POST":
+        card_code = request.form["card_code"].strip()
+        if card_code:
+            # Create search history entry
+            search_entry = {
+                'code': card_code,
+                'timestamp': time.time()
+            }
+            
+            # Add to history (limit to last 10 searches)
+            session['search_history'].insert(0, search_entry)
+            session['search_history'] = session['search_history'][:10]
+            session.modified = True
+            
+        # Process the search
         card_code = request.form["card_code"].strip()
         try:
             with sync_playwright() as p:
@@ -160,13 +187,42 @@ def index():
     # Get card_code for template context
     card_code = request.form.get("card_code", "") if request.method == "POST" else ""
     
+    # Get search history for template
+    search_history = session.get('search_history', [])
+    
     return render_template_string("""
         <!DOCTYPE html>
         <html>
         <head>
             <title>TCGPlayer Card Lookup</title>
             <style>
-                body { font-family: Arial, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; }
+                body { 
+                    font-family: Arial, sans-serif; 
+                    margin: 0; 
+                    padding: 0; 
+                    display: flex;
+                    min-height: 100vh;
+                }
+                
+                .sidebar {
+                    width: 250px;
+                    background: #f8f9fa;
+                    border-right: 1px solid #ddd;
+                    padding: 20px;
+                    overflow-y: auto;
+                    height: 100vh;
+                    position: fixed;
+                    left: 0;
+                    top: 0;
+                }
+                
+                .main-content {
+                    margin-left: 250px;
+                    padding: 20px;
+                    flex: 1;
+                    max-width: calc(100% - 250px);
+                }
+                
                 h1 { color: #333; text-align: center; }
                 form { margin: 20px 0; text-align: center; }
                 input[type="text"] { padding: 10px; width: 300px; font-size: 16px; }
@@ -213,7 +269,55 @@ def index():
                     margin-top: 15px;
                 }
                 
+                .history-title {
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin-bottom: 15px;
+                    color: #333;
+                    border-bottom: 2px solid #007bff;
+                    padding-bottom: 5px;
+                }
+                
+                .history-item {
+                    padding: 10px;
+                    margin-bottom: 8px;
+                    background: white;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    transition: background-color 0.2s;
+                }
+                
+                .history-item:hover {
+                    background-color: #e9ecef;
+                }
+                
+                .history-code {
+                    font-weight: bold;
+                    color: #007bff;
+                }
+                
+                .history-time {
+                    font-size: 12px;
+                    color: #6c757d;
+                    margin-top: 3px;
+                }
+                
+                .no-history {
+                    color: #6c757d;
+                    font-style: italic;
+                    text-align: center;
+                    margin-top: 20px;
+                }
+                
                 @media (max-width: 900px) {
+                    .sidebar {
+                        width: 250px;
+                    }
+                    .main-content {
+                        margin-left: 250px;
+                        max-width: calc(100% - 250px);
+                    }
                     .card-container {
                         flex-direction: column;
                         align-items: center;
@@ -223,53 +327,102 @@ def index():
                         width: 100%;
                     }
                 }
+                
+                @media (max-width: 768px) {
+                    body {
+                        flex-direction: column;
+                    }
+                    .sidebar {
+                        width: 100%;
+                        height: auto;
+                        position: static;
+                        border-right: none;
+                        border-bottom: 1px solid #ddd;
+                    }
+                    .main-content {
+                        margin-left: 0;
+                        max-width: 100%;
+                    }
+                }
             </style>
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    // Add click event listeners to history items
+                    const historyItems = document.querySelectorAll('.history-item');
+                    historyItems.forEach(item => {
+                        item.addEventListener('click', function() {
+                            const code = this.getAttribute('data-code');
+                            const inputField = document.querySelector('input[name="card_code"]');
+                            inputField.value = code;
+                            
+                            // Submit the form
+                            document.querySelector('form').submit();
+                        });
+                    });
+                });
+            </script>
         </head>
         <body>
-            <h1>TCGPlayer Card Lookup</h1>
-            <form method="post">
-                <input name="card_code" placeholder="Enter card code (e.g., 230147)" required>
-                <button type="submit">Check Prices</button>
-            </form>
+            <div class="sidebar">
+                <div class="history-title">Search History</div>
+                {% if search_history %}
+                    {% for search in search_history %}
+                        <div class="history-item" data-code="{{ search.code }}">
+                            <div class="history-code">{{ search.code }}</div>
+                            <div class="history-time">{{ search.timestamp|datetime }}</div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="no-history">No search history yet</div>
+                {% endif %}
+            </div>
             
-            {% if error %}
-                <p class="error">Error: {{ error }}</p>
-            {% endif %}
-            
-            {% if card_name %}
-                <div class="card-container">
-                    <div class="card-image-container">
-                        <img src="{{ card_image }}" alt="{{ card_name }}" class="card-image">
-                    </div>
-                    
-                    <div class="card-details">
-                        <h2 class="card-title">{{ card_name }}</h2>
+            <div class="main-content">
+                <h1>TCGPlayer Card Lookup</h1>
+                <form method="post">
+                    <input name="card_code" placeholder="Enter card code (e.g., 230147)" autocomplete="off" required>
+                    <button type="submit">Check Prices</button>
+                </form>
+                
+                {% if error %}
+                    <p class="error">Error: {{ error }}</p>
+                {% endif %}
+                
+                {% if card_name %}
+                    <div class="card-container">
+                        <div class="card-image-container">
+                            <img src="{{ card_image }}" alt="{{ card_name }}" class="card-image">
+                        </div>
                         
-                        <table class="price-table">
-                            <tr>
-                                <th>Seller</th>
-                                <th>Price / Availability</th>
-                            </tr>
-                            {% for seller, price in results.items() %}
-                            <tr>
-                                <td>
-                                    {% if seller != "TCGPlayer" %}
-                                        <b><a href="{{ base_url }}{{ card_code }}/?seller={{ codes[seller] }}" target="_blank" style="color: #007bff; text-decoration: none;">{{ seller }}</a></b>
-                                    {% else %}
-                                        <b><a href="{{ base_url }}{{ card_code }}" target="_blank" style="color: #007bff; text-decoration: none;">{{ seller }}</a></b>
-                                    {% endif %}
-                                </td>
-                                <td>{{ price }}</td>
-                            </tr>
-                            {% endfor %}
-                        </table>
+                        <div class="card-details">
+                            <h2 class="card-title">{{ card_name }}</h2>
+                            
+                            <table class="price-table">
+                                <tr>
+                                    <th>Seller</th>
+                                    <th>Price / Availability</th>
+                                </tr>
+                                {% for seller, price in results.items() %}
+                                <tr>
+                                    <td>
+                                        {% if seller != "TCGPlayer" %}
+                                            <b><a href="{{ base_url }}{{ card_code }}/?seller={{ codes[seller] }}" target="_blank" style="color: #007bff; text-decoration: none;">{{ seller }}</a></b>
+                                        {% else %}
+                                            <b><a href="{{ base_url }}{{ card_code }}" target="_blank" style="color: #007bff; text-decoration: none;">{{ seller }}</a></b>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ price }}</td>
+                                </tr>
+                                {% endfor %}
+                            </table>
+                        </div>
                     </div>
-                </div>
-            {% endif %}
+                {% endif %}
+            </div>
         </body>
         </html>
     """, results=results, card_name=card_name, error=error, card_image=card_image, 
-         codes=codes, base_url=Base_URL, card_code=card_code)
+         codes=codes, base_url=Base_URL, card_code=card_code, search_history=search_history)
 
 if __name__ == "__main__":
     app.run(debug=True)
